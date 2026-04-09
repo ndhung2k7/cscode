@@ -846,3 +846,202 @@ body, html {
     transform: translateX(100px);
   }
 }
+/* Thêm vào cuối file styles.css */
+
+/* Run Button Styles */
+.run-button-group {
+  display: flex;
+  gap: 4px;
+  margin-right: 8px;
+}
+
+.run-btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: var(--transition);
+}
+
+.run-btn:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.run-btn i {
+  font-size: 11px;
+}
+
+.auto-run-btn {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.auto-run-btn:hover {
+  background: var(--bg-tertiary);
+}
+
+.auto-run-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+/* Preview Placeholder */
+.preview-container {
+  position: relative;
+}
+
+.preview-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: var(--transition);
+}
+
+.preview-placeholder.hidden {
+  display: none;
+}
+
+.preview-placeholder i {
+  font-size: 64px;
+  color: var(--accent);
+  margin-bottom: 24px;
+  opacity: 0.5;
+}
+
+.preview-placeholder h3 {
+  font-size: 20px;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.preview-placeholder p {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.preview-placeholder strong {
+  color: var(--accent);
+}
+
+/* Action icon for Run */
+.action-icons .fa-play {
+  color: var(--success);
+}
+
+.action-icons .fa-play:hover {
+  color: #2ecc71;
+  transform: scale(1.1);
+}
+
+/* Status indicators */
+#previewStatus.running i {
+  color: var(--success);
+  animation: pulse 1.5s infinite;
+}
+
+#previewStatus.error i {
+  color: var(--error);
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* File tree drag over effect */
+.tree-item.drag-over {
+  background: var(--accent) !important;
+  color: white !important;
+  position: relative;
+}
+
+.tree-item.drag-over::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  pointer-events: none;
+  animation: borderPulse 1s infinite;
+}
+
+@keyframes borderPulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Upload progress in overlay */
+.drop-progress {
+  width: 100%;
+  margin-top: 24px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 16px 0;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #00d4ff);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  width: 0%;
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  100% {
+    left: 100%;
+  }
+}
