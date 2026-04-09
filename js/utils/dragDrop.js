@@ -1,5 +1,6 @@
 /**
- * Drag & Drop Manager - Xử lý kéo thả files và folders
+ * Drag & Drop Manager - Fixed version
+ * Xử lý kéo thả files và folders với sửa lỗi
  */
 
 export class DragDropManager {
@@ -24,62 +25,75 @@ export class DragDropManager {
   }
   
   setupGlobalDragDrop() {
-    const dropZones = [document.body, this.dropOverlay];
-    
-    dropZones.forEach(zone => {
-      // Prevent default drag behaviors
-      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        zone.addEventListener(eventName, (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        });
+    // Ngăn chặn hành vi mặc định trên toàn bộ document
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+      document.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
       });
     });
     
-    // Track drag enter/leave for overlay
-    document.body.addEventListener('dragenter', (e) => {
+    // Hiển thị overlay khi kéo file vào
+    document.addEventListener('dragenter', (e) => {
+      e.preventDefault();
       this.dragCounter++;
-      if (!this.isDragging) {
-        this.showDropOverlay();
-        this.isDragging = true;
+      
+      // Chỉ hiển thị overlay khi kéo file (không phải text/links)
+      if (e.dataTransfer.types.includes('Files')) {
+        if (!this.isDragging) {
+          this.showDropOverlay();
+          this.isDragging = true;
+        }
       }
     });
     
-    document.body.addEventListener('dragleave', (e) => {
+    document.addEventListener('dragleave', (e) => {
+      e.preventDefault();
       this.dragCounter--;
+      
       if (this.dragCounter === 0) {
         this.hideDropOverlay();
         this.isDragging = false;
       }
     });
     
-    // Handle drop
-    document.body.addEventListener('drop', async (e) => {
+    // Xử lý drop trên document
+    document.addEventListener('drop', async (e) => {
+      e.preventDefault();
       this.dragCounter = 0;
       this.hideDropOverlay();
       this.isDragging = false;
       
-      const items = e.dataTransfer.items;
-      if (items) {
-        await this.handleDrop(items);
+      // Lấy files từ drop event
+      const files = this.getFilesFromDrop(e.dataTransfer);
+      if (files.length > 0) {
+        await this.processDroppedFiles(files);
       }
     });
     
-    // Also handle drop on overlay
+    // Xử lý drop trên overlay
     this.dropOverlay.addEventListener('drop', async (e) => {
-      const items = e.dataTransfer.items;
-      if (items) {
-        await this.handleDrop(items);
+      e.preventDefault();
+      e.stopPropagation();
+      
+      const files = this.getFilesFromDrop(e.dataTransfer);
+      if (files.length > 0) {
+        await this.processDroppedFiles(files);
       }
+      
+      this.hideDropOverlay();
+      this.isDragging = false;
+      this.dragCounter = 0;
     });
   }
   
   setupFileTreeDragDrop() {
-    // Allow dropping into specific folders
+    // Cho phép drop vào folder trong file tree
     document.addEventListener('dragover', (e) => {
       const folder = e.target.closest('.tree-item.folder');
-      if (folder) {
+      if (folder && e.dataTransfer.types.includes('Files')) {
         e.preventDefault();
+        e.stopPropagation();
         folder.classList.add('drag-over');
       }
     });
@@ -93,142 +107,142 @@ export class DragDropManager {
     
     document.addEventListener('drop', async (e) => {
       const folder = e.target.closest('.tree-item.folder');
-      if (folder) {
+      if (folder && e.dataTransfer.types.includes('Files')) {
         e.preventDefault();
         e.stopPropagation();
         folder.classList.remove('drag-over');
         
         const targetPath = folder.dataset.path;
-        const items = e.dataTransfer.items;
+        const files = this.getFilesFromDrop(e.dataTransfer);
         
-        if (items) {
-          await this.handleDrop(items, targetPath);
+        if (files.length > 0) {
+          await this.processDroppedFiles(files, targetPath);
         }
       }
     });
   }
   
-  showDropOverlay() {
-    this.dropOverlay.style.display = 'flex';
-    this.dropProgress.style.display = 'none';
-    this.progressFill.style.width = '0%';
-  }
-  
-  hideDropOverlay() {
-    this.dropOverlay.style.display = 'none';
-  }
-  
-  async handleDrop(items, targetPath = '') {
-    const entries = [];
+  getFilesFromDrop(dataTransfer) {
+    const files = [];
     
-    // Convert items to entries
-    for (const item of items) {
-      if (item.kind === 'file') {
-        const entry = item.webkitGetAsEntry();
-        if (entry) {
-          entries.push(entry);
+    // Lấy files từ items (hỗ trợ cả files và folders)
+    if (dataTransfer.items) {
+      for (const item of dataTransfer.items) {
+        if (item.kind === 'file') {
+          const entry = item.webkitGetAsEntry();
+          if (entry) {
+            files.push(entry);
+          }
         }
       }
     }
     
-    if (entries.length === 0) return;
-    
-    // Show progress
-    this.dropProgress.style.display = 'block';
-    
-    // Collect all files
-    const files = [];
-    let totalFiles = 0;
-    
-    // First pass: count total files
-    for (const entry of entries) {
-      totalFiles += await this.countFiles(entry);
+    // Fallback: lấy files trực tiếp
+    if (files.length === 0 && dataTransfer.files) {
+      for (const file of dataTransfer.files) {
+        files.push(file);
+      }
     }
     
-    let processedFiles = 0;
+    return files;
+  }
+  
+  async processDroppedFiles(entries, targetPath = '') {
+    // Hiển thị progress
+    this.showDropOverlay();
+    this.dropProgress.style.display = 'block';
     
-    // Second pass: process files
+    const fileList = [];
+    
+    // Đệ quy xử lý entries
     for (const entry of entries) {
-      await this.processEntry(entry, targetPath, files, (progress) => {
-        processedFiles++;
-        const percentage = (processedFiles / totalFiles) * 100;
-        this.updateProgress(percentage, `Processing ${processedFiles}/${totalFiles} files...`);
-      });
+      await this.traverseFileTree(entry, targetPath, fileList);
     }
     
     // Upload files
-    await this.uploadFiles(files, targetPath);
+    if (fileList.length > 0) {
+      await this.uploadFiles(fileList);
+    } else {
+      this.app.ui.showToast('No files to upload', 'warning');
+    }
     
-    // Hide overlay after short delay
+    // Ẩn overlay sau khi hoàn thành
     setTimeout(() => {
       this.hideDropOverlay();
     }, 500);
   }
   
-  async countFiles(entry) {
+  async traveseFileTree(entry, parentPath, fileList) {
     if (entry.isFile) {
-      return 1;
-    } else if (entry.isDirectory) {
-      let count = 0;
-      const reader = entry.createReader();
-      const entries = await this.readAllEntries(reader);
-      
-      for (const childEntry of entries) {
-        count += await this.countFiles(childEntry);
+      // Xử lý file
+      try {
+        const file = await this.entryToFile(entry);
+        const path = parentPath ? `${parentPath}/${entry.name}` : entry.name;
+        fileList.push({ path, file });
+      } catch (error) {
+        console.error('Error reading file:', entry.name, error);
       }
-      
-      return count;
-    }
-    return 0;
-  }
-  
-  async processEntry(entry, parentPath, files, onProgress) {
-    if (entry.isFile) {
-      const file = await this.entryToFile(entry);
-      const path = parentPath ? `${parentPath}/${entry.name}` : entry.name;
-      files.push({ path, file });
-      onProgress();
     } else if (entry.isDirectory) {
+      // Xử lý folder
       const folderPath = parentPath ? `${parentPath}/${entry.name}` : entry.name;
-      const reader = entry.createReader();
-      const entries = await this.readAllEntries(reader);
       
-      for (const childEntry of entries) {
-        await this.processEntry(childEntry, folderPath, files, onProgress);
+      try {
+        const reader = entry.createReader();
+        const entries = await this.readAllEntries(reader);
+        
+        for (const childEntry of entries) {
+          await this.traverseFileTree(childEntry, folderPath, fileList);
+        }
+      } catch (error) {
+        console.error('Error reading directory:', entry.name, error);
       }
+    } else if (entry instanceof File) {
+      // Xử lý File object trực tiếp
+      const path = parentPath ? `${parentPath}/${entry.name}` : entry.name;
+      fileList.push({ path, file: entry });
     }
   }
   
   async readAllEntries(reader) {
     const entries = [];
-    let batch;
     
-    do {
-      batch = await new Promise((resolve) => {
-        reader.readEntries((results) => resolve(results));
-      });
-      entries.push(...batch);
-    } while (batch.length > 0);
+    try {
+      let batch;
+      do {
+        batch = await new Promise((resolve, reject) => {
+          try {
+            reader.readEntries(resolve, reject);
+          } catch (error) {
+            reject(error);
+          }
+        });
+        entries.push(...batch);
+      } while (batch.length > 0);
+    } catch (error) {
+      console.error('Error reading directory entries:', error);
+    }
     
     return entries;
   }
   
   entryToFile(entry) {
-    return new Promise((resolve) => {
-      entry.file((file) => resolve(file));
+    return new Promise((resolve, reject) => {
+      entry.file(resolve, reject);
     });
   }
   
-  async uploadFiles(files, targetPath) {
+  async uploadFiles(files) {
     const total = files.length;
     let uploaded = 0;
-    const errors = [];
+    let errors = [];
     
-    // Create folder structure first
+    this.updateProgress(0, `Preparing to upload ${total} files...`);
+    
+    // Tạo cấu trúc thư mục trước
     const folders = new Set();
     files.forEach(({ path }) => {
       const parts = path.split('/');
-      let currentPath = targetPath || '';
+      let currentPath = '';
       
       for (let i = 0; i < parts.length - 1; i++) {
         currentPath = currentPath ? `${currentPath}/${parts[i]}` : parts[i];
@@ -236,27 +250,33 @@ export class DragDropManager {
       }
     });
     
-    // Create folders
+    // Tạo folders
     for (const folderPath of folders) {
       if (!this.app.state.getFile(folderPath)) {
         this.app.state.createFolder(folderPath);
       }
     }
     
-    // Upload files with progress
-    for (const { path: relativePath, file } of files) {
+    // Upload từng file
+    for (const { path, file } of files) {
       try {
-        const content = await file.text();
-        const fullPath = targetPath ? `${targetPath}/${relativePath}` : relativePath;
+        this.updateProgress(
+          (uploaded / total) * 100,
+          `Uploading ${file.name} (${uploaded + 1}/${total})`
+        );
         
-        this.app.state.createFile(fullPath, content);
+        // Đọc nội dung file
+        const content = await this.readFileAsText(file);
+        
+        // Lưu vào state
+        this.app.state.createFile(path, content);
         
         uploaded++;
-        const percentage = (uploaded / total) * 100;
-        this.updateProgress(percentage, `Uploading ${uploaded}/${total} files...`);
         
-        // Update file tree
-        this.app.fileSystem.render();
+        // Cập nhật UI sau mỗi 5 files
+        if (uploaded % 5 === 0) {
+          this.app.fileSystem.render();
+        }
         
       } catch (error) {
         console.error(`Error uploading ${file.name}:`, error);
@@ -264,41 +284,73 @@ export class DragDropManager {
       }
     }
     
-    // Show result
+    // Render lại file tree
+    this.app.fileSystem.render();
+    
+    // Hiển thị kết quả
     if (errors.length > 0) {
       this.app.ui.showToast(
-        `Uploaded ${uploaded} files with ${errors.length} errors`,
+        `Uploaded ${uploaded}/${total} files (${errors.length} errors)`,
         'warning'
       );
+      console.error('Upload errors:', errors);
     } else {
       this.app.ui.showToast(
-        `Successfully uploaded ${uploaded} files`,
+        `Successfully uploaded ${uploaded} ${uploaded === 1 ? 'file' : 'files'}`,
         'success'
       );
     }
     
-    // Open first file if no file is open
-    if (!this.app.state.activeFile && files.length > 0) {
-      const firstFile = files.find(f => f.path.endsWith('.html') || f.path.endsWith('.js') || f.path.endsWith('.css'));
+    // Mở file đầu tiên nếu chưa có file nào mở
+    if (!this.app.state.activeFile && uploaded > 0) {
+      const firstFile = files.find(f => 
+        f.path.endsWith('.html') || 
+        f.path.endsWith('.js') || 
+        f.path.endsWith('.css')
+      );
+      
       if (firstFile) {
-        const fullPath = targetPath ? `${targetPath}/${firstFile.path}` : firstFile.path;
-        this.app.state.openFile(fullPath);
+        this.app.state.openFile(firstFile.path);
       }
     }
     
-    // Update preview
-    this.app.preview.update();
+    // Cập nhật file count
+    this.app.updateFileCount();
+  }
+  
+  readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = (e) => reject(e);
+      reader.readAsText(file);
+    });
   }
   
   updateProgress(percentage, text) {
-    this.progressFill.style.width = `${percentage}%`;
-    this.progressText.textContent = text;
+    if (this.progressFill) {
+      this.progressFill.style.width = `${Math.min(percentage, 100)}%`;
+    }
+    if (this.progressText) {
+      this.progressText.textContent = text;
+    }
   }
   
-  // Drag out of window
-  handleDragEnd() {
-    this.dragCounter = 0;
-    this.hideDropOverlay();
-    this.isDragging = false;
+  showDropOverlay() {
+    if (this.dropOverlay) {
+      this.dropOverlay.style.display = 'flex';
+      if (this.dropProgress) {
+        this.dropProgress.style.display = 'none';
+      }
+      if (this.progressFill) {
+        this.progressFill.style.width = '0%';
+      }
+    }
+  }
+  
+  hideDropOverlay() {
+    if (this.dropOverlay) {
+      this.dropOverlay.style.display = 'none';
+    }
   }
 }
