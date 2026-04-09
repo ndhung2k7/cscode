@@ -163,6 +163,21 @@
     </div>
   </div>
 
+  <!-- Drag & Drop Overlay -->
+  <div id="dropOverlay" class="drop-overlay" style="display:none">
+    <div class="drop-message">
+      <i class="fas fa-cloud-upload-alt"></i>
+      <h2>Drop files or folders here</h2>
+      <p>Upload to workspace</p>
+      <div class="drop-progress" id="dropProgress" style="display:none">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <p id="progressText">Uploading...</p>
+      </div>
+    </div>
+  </div>
+
   <!-- Scripts -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
