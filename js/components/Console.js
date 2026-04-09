@@ -1,31 +1,14 @@
-/**
- * Console Manager - DevTools-like console panel
- */
-
-import { CONSTANTS } from '../core/constants.js';
-
 export class ConsoleManager {
-  constructor(options) {
-    this.container = options.container;
-    this.maxLines = options.maxLines || CONSTANTS.MAX_CONSOLE_LINES;
+  constructor(state) {
+    this.state = state;
+    this.container = document.getElementById('consoleOutput');
     this.messages = [];
   }
   
-  log(args, method = 'log') {
-    const message = this.formatMessage(args, method);
-    this.messages.push({ method, message, timestamp: Date.now() });
-    
-    // Limit messages
-    if (this.messages.length > this.maxLines) {
-      this.messages.shift();
-    }
-    
-    this.renderMessage(message, method);
-  }
-  
-  formatMessage(args, method) {
-    if (Array.isArray(args)) {
-      return args.map(arg => {
+  log(method, args) {
+    const message = {
+      method,
+      content: args.map(arg => {
         if (typeof arg === 'object') {
           try {
             return JSON.stringify(arg, null, 2);
@@ -34,41 +17,36 @@ export class ConsoleManager {
           }
         }
         return String(arg);
-      }).join(' ');
-    }
+      }).join(' '),
+      timestamp: new Date()
+    };
     
-    return String(args);
+    this.messages.push(message);
+    this.renderMessage(message);
+    
+    // Limit messages
+    if (this.messages.length > 500) {
+      this.messages.shift();
+      this.container.removeChild(this.container.firstChild);
+    }
   }
   
-  renderMessage(message, method) {
-    const line = document.createElement('div');
-    line.className = `console-line ${method}`;
+  renderMessage(message) {
+    const div = document.createElement('div');
+    div.className = `console-line ${message.method}`;
     
-    const icon = this.getIcon(method);
-    const time = new Date().toLocaleTimeString();
+    const time = message.timestamp.toLocaleTimeString();
     
-    line.innerHTML = `
+    div.innerHTML = `
       <span class="console-time">${time}</span>
-      <i class="${icon}"></i>
-      <span class="console-message">${this.escapeHtml(message)}</span>
+      <span class="console-message">${this.escape(message.content)}</span>
     `;
     
-    this.container.appendChild(line);
+    this.container.appendChild(div);
     this.container.scrollTop = this.container.scrollHeight;
   }
   
-  getIcon(method) {
-    const icons = {
-      log: 'fas fa-circle',
-      info: 'fas fa-info-circle',
-      warn: 'fas fa-exclamation-triangle',
-      error: 'fas fa-times-circle',
-      debug: 'fas fa-bug'
-    };
-    return icons[method] || 'fas fa-terminal';
-  }
-  
-  escapeHtml(text) {
+  escape(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
@@ -88,9 +66,5 @@ export class ConsoleManager {
         line.style.display = 'none';
       }
     }
-  }
-  
-  export() {
-    return this.messages.map(m => `[${new Date(m.timestamp).toISOString()}] [${m.method}] ${m.message}`).join('\n');
   }
 }
