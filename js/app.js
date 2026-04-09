@@ -1,5 +1,6 @@
 /**
  * Web IDE Pro - Main Application
+ * Nâng cấp với Drag & Drop Manager
  */
 
 import { AppState } from './core/state.js';
@@ -9,6 +10,7 @@ import { EditorManager } from './components/Editor.js';
 import { PreviewManager } from './components/Preview.js';
 import { FileSystemManager } from './components/FileSystem.js';
 import { ConsoleManager } from './components/Console.js';
+import { DragDropManager } from './utils/dragDrop.js';
 import { UIHelpers } from './utils/helpers.js';
 
 class WebIDEPro {
@@ -21,6 +23,7 @@ class WebIDEPro {
     this.preview = null;
     this.fileSystem = null;
     this.console = null;
+    this.dragDrop = null;
     this.split = null;
     
     this.init();
@@ -40,12 +43,18 @@ class WebIDEPro {
     this.setupEventListeners();
     
     // Setup drag & drop
-    this.setupDragAndDrop();
+    this.dragDrop = new DragDropManager(this);
+    
+    // Setup console capture
+    this.setupConsoleCapture();
     
     // Initial render
     this.render();
     
-    console.log('✅ Web IDE Pro initialized');
+    // Welcome message
+    this.showWelcomeMessage();
+    
+    console.log('✅ Web IDE Pro initialized with Drag & Drop support');
   }
   
   async loadState() {
@@ -79,9 +88,6 @@ class WebIDEPro {
     
     // Console
     this.console = new ConsoleManager(this.state);
-    
-    // Setup console capture from preview
-    this.setupConsoleCapture();
   }
   
   setupSplitLayout() {
@@ -110,10 +116,12 @@ class WebIDEPro {
     
     document.getElementById('fileInput').addEventListener('change', (e) => {
       this.handleFileUpload(e.target.files);
+      e.target.value = ''; // Reset input
     });
     
     document.getElementById('folderInput').addEventListener('change', (e) => {
       this.handleFolderUpload(e.target.files);
+      e.target.value = ''; // Reset input
     });
     
     // Download project
@@ -130,6 +138,12 @@ class WebIDEPro {
       this.fileSystem.createNewFolder('');
     });
     
+    // Refresh explorer
+    document.getElementById('refreshExplorer').addEventListener('click', () => {
+      this.fileSystem.render();
+      this.ui.showToast('Explorer refreshed', 'info');
+    });
+    
     // Activity bar
     document.querySelectorAll('.activity-icon').forEach(icon => {
       icon.addEventListener('click', () => {
@@ -140,6 +154,7 @@ class WebIDEPro {
     // Preview controls
     document.getElementById('refreshPreview').addEventListener('click', () => {
       this.preview.refresh();
+      this.ui.showToast('Preview refreshed', 'success');
     });
     
     document.getElementById('openInNewTab').addEventListener('click', () => {
@@ -159,6 +174,20 @@ class WebIDEPro {
       this.console.filter(e.target.value);
     });
     
+    // Workspace collapse/expand
+    document.getElementById('workspaceInfo').addEventListener('click', () => {
+      const fileTree = document.getElementById('fileTree');
+      const icon = document.querySelector('#workspaceInfo i');
+      
+      if (fileTree.style.display === 'none') {
+        fileTree.style.display = 'block';
+        icon.style.transform = 'rotate(0deg)';
+      } else {
+        fileTree.style.display = 'none';
+        icon.style.transform = 'rotate(-90deg)';
+      }
+    });
+    
     // Auto-save
     window.addEventListener('beforeunload', () => {
       this.saveState();
@@ -166,111 +195,8 @@ class WebIDEPro {
     
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
-        e.preventDefault();
-        this.showQuickOpen();
-      }
+      this.handleKeyboardShortcuts(e);
     });
-  }
-  
-  setupDragAndDrop() {
-    const dropZone = document.body;
-    
-    dropZone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      dropZone.classList.add('drag-over');
-    });
-    
-    dropZone.addEventListener('dragleave', () => {
-      dropZone.classList.remove('drag-over');
-    });
-    
-    dropZone.addEventListener('drop', async (e) => {
-      e.preventDefault();
-      dropZone.classList.remove('drag-over');
-      
-      const items = e.dataTransfer.items;
-      await this.handleDrop(items);
-    });
-  }
-  
-  async handleDrop(items) {
-    const files = [];
-    
-    for (const item of items) {
-      if (item.kind === 'file') {
-        const entry = item.webkitGetAsEntry();
-        await this.traverseFileTree(entry, '', files);
-      }
-    }
-    
-    this.processUploadedFiles(files);
-  }
-  
-  async traveseFileTree(entry, path, files) {
-    if (entry.isFile) {
-      const file = await this.entryToFile(entry);
-      files.push({ path: path + entry.name, file });
-    } else if (entry.isDirectory) {
-      const reader = entry.createReader();
-      const entries = await this.readAllEntries(reader);
-      
-      for (const childEntry of entries) {
-        await this.traverseFileTree(childEntry, path + entry.name + '/', files);
-      }
-    }
-  }
-  
-  async readAllEntries(reader) {
-    const entries = [];
-    let batch;
-    
-    do {
-      batch = await new Promise((resolve) => reader.readEntries(resolve));
-      entries.push(...batch);
-    } while (batch.length > 0);
-    
-    return entries;
-  }
-  
-  async entryToFile(entry) {
-    return new Promise((resolve) => {
-      entry.file(resolve);
-    });
-  }
-  
-  async handleFileUpload(files) {
-    const fileList = Array.from(files).map(file => ({
-      path: file.webkitRelativePath || file.name,
-      file
-    }));
-    
-    this.processUploadedFiles(fileList);
-  }
-  
-  async handleFolderUpload(files) {
-    this.handleFileUpload(files);
-  }
-  
-  async processUploadedFiles(files) {
-    for (const { path, file } of files) {
-      const content = await file.text();
-      
-      // Create folders if needed
-      const parts = path.split('/');
-      let currentPath = '';
-      
-      for (let i = 0; i < parts.length - 1; i++) {
-        currentPath += (currentPath ? '/' : '') + parts[i];
-        if (!this.state.getFile(currentPath)) {
-          this.state.createFolder(currentPath);
-        }
-      }
-      
-      this.state.createFile(path, content);
-    }
-    
-    this.ui.showToast(`Uploaded ${files.length} files`, 'success');
   }
   
   setupConsoleCapture() {
@@ -285,15 +211,54 @@ class WebIDEPro {
     });
   }
   
+  async handleFileUpload(files) {
+    const fileArray = Array.from(files);
+    const uploadFiles = fileArray.map(file => ({
+      path: file.name,
+      file: file
+    }));
+    
+    await this.dragDrop.uploadFiles(uploadFiles, '');
+  }
+  
+  async handleFolderUpload(files) {
+    // Group files by folder structure
+    const fileMap = new Map();
+    
+    for (const file of files) {
+      const path = file.webkitRelativePath;
+      fileMap.set(path, file);
+    }
+    
+    const uploadFiles = Array.from(fileMap.entries()).map(([path, file]) => ({
+      path,
+      file
+    }));
+    
+    await this.dragDrop.uploadFiles(uploadFiles, '');
+  }
+  
   render() {
     this.fileSystem.render();
     this.editor.updateTabs();
+    this.updateFileCount();
+  }
+  
+  updateFileCount() {
+    let count = 0;
+    for (const [_, item] of this.state.fileSystem) {
+      if (item.type === 'file') count++;
+    }
+    document.getElementById('fileCount').textContent = `${count} file${count !== 1 ? 's' : ''}`;
   }
   
   toggleTheme() {
     this.state.theme = this.state.theme === 'dark' ? 'light' : 'dark';
     document.body.classList.toggle('theme-light', this.state.theme === 'light');
     this.editor.setTheme(this.state.theme);
+    
+    const themeIcon = document.querySelector('#themeToggle');
+    themeIcon.className = this.state.theme === 'dark' ? 'fas fa-moon' : 'fas fa-sun';
     
     document.getElementById('themeStatus').textContent = 
       this.state.theme === 'dark' ? 'Dark' : 'Light';
@@ -316,30 +281,43 @@ class WebIDEPro {
   toggleFullscreen() {
     const editor = document.getElementById('editorPane');
     const preview = document.getElementById('previewPane');
+    const icon = document.querySelector('#toggleFullscreen');
     
     if (editor.style.display === 'none') {
       editor.style.display = 'flex';
       preview.style.width = '';
       this.split.setSizes([50, 50]);
+      icon.className = 'fas fa-expand';
     } else {
       editor.style.display = 'none';
       preview.style.width = '100%';
+      icon.className = 'fas fa-compress';
     }
   }
   
   async downloadProject() {
-    const zip = new JSZip();
-    
-    for (const [path, item] of this.state.fileSystem) {
-      if (item.type === 'file') {
-        zip.file(path, item.content);
+    try {
+      const zip = new JSZip();
+      
+      for (const [path, item] of this.state.fileSystem) {
+        if (item.type === 'file') {
+          zip.file(path, item.content);
+        }
       }
+      
+      const blob = await zip.generateAsync({ 
+        type: 'blob',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 }
+      });
+      
+      const timestamp = new Date().toISOString().split('T')[0];
+      saveAs(blob, `webide-project-${timestamp}.zip`);
+      
+      this.ui.showToast('Project downloaded successfully', 'success');
+    } catch (error) {
+      this.ui.showToast('Failed to download project', 'error');
     }
-    
-    const blob = await zip.generateAsync({ type: 'blob' });
-    saveAs(blob, 'webide-project.zip');
-    
-    this.ui.showToast('Project downloaded', 'success');
   }
   
   saveState() {
@@ -353,6 +331,26 @@ class WebIDEPro {
     this.storage.save(CONSTANTS.STORAGE_KEYS.SETTINGS, settings);
   }
   
+  handleKeyboardShortcuts(e) {
+    // Ctrl/Cmd + P: Quick open
+    if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+      e.preventDefault();
+      this.showQuickOpen();
+    }
+    
+    // Ctrl/Cmd + B: Toggle sidebar
+    if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+      e.preventDefault();
+      this.toggleSidebar();
+    }
+    
+    // Ctrl/Cmd + Shift + F: Format code
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'F') {
+      e.preventDefault();
+      this.editor.format();
+    }
+  }
+  
   showQuickOpen() {
     const files = Array.from(this.state.fileSystem.keys())
       .filter(path => this.state.getFile(path)?.type === 'file');
@@ -360,13 +358,34 @@ class WebIDEPro {
     const search = prompt(`Quick open (${files.length} files):`);
     if (!search) return;
     
-    const match = files.find(f => 
+    const matches = files.filter(f => 
       f.toLowerCase().includes(search.toLowerCase())
     );
     
-    if (match) {
-      this.state.openFile(match);
+    if (matches.length === 1) {
+      this.state.openFile(matches[0]);
+    } else if (matches.length > 1) {
+      // Show simple selection
+      const selected = prompt(`Multiple matches:\n${matches.join('\n')}\n\nEnter exact path:`);
+      if (selected && matches.includes(selected)) {
+        this.state.openFile(selected);
+      }
     }
+  }
+  
+  toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    sidebar.style.display = sidebar.style.display === 'none' ? 'flex' : 'none';
+  }
+  
+  showWelcomeMessage() {
+    setTimeout(() => {
+      this.ui.showToast(
+        '👋 Drag & drop files or folders anywhere to upload',
+        'info',
+        5000
+      );
+    }, 1000);
   }
 }
 
